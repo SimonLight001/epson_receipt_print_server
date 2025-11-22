@@ -117,6 +117,20 @@ async function printViaUSBIds(text, cut = true) {
   }
   
   try {
+    // First, check if USB device is accessible
+    try {
+      const { stdout: lsusbOutput } = await execAsync('lsusb 2>/dev/null || echo ""');
+      const deviceFound = lsusbOutput.includes(usbVendorId.replace('0x', '')) && 
+                          lsusbOutput.includes(usbProductId.replace('0x', ''));
+      
+      if (!deviceFound) {
+        console.warn(`USB device ${usbVendorId}:${usbProductId} not found in lsusb output`);
+        console.warn('lsusb output:', lsusbOutput);
+      }
+    } catch (e) {
+      console.warn('Could not run lsusb to verify device:', e.message);
+    }
+    
     const scriptPath = path.join(__dirname, 'print_usb.py');
     const input = JSON.stringify({
       vendor_id: usbVendorId,
@@ -124,6 +138,8 @@ async function printViaUSBIds(text, cut = true) {
       text: text,
       cut: cut
     });
+    
+    console.log(`Attempting to print via USB IDs: ${usbVendorId}:${usbProductId}`);
     
     // Use spawn for better security and handling of special characters
     const { spawn } = require('child_process');
@@ -160,14 +176,30 @@ async function printViaUSBIds(text, cut = true) {
     
     try {
       const result = JSON.parse(stdout.trim());
+      if (!result.success) {
+        console.error('Python script error:', result.error);
+        // Provide more helpful error message
+        if (result.error.includes('No such device') || result.error.includes('disconnected')) {
+          result.error = `USB device not found. Make sure the printer is connected and the container has USB access. Error: ${result.error}`;
+        }
+      }
       return result;
     } catch (e) {
       // If output is not JSON, treat as error
-      return { success: false, error: stdout || stderr || 'Unknown error' };
+      const errorMsg = stdout || stderr || 'Unknown error';
+      console.error('Failed to parse Python output:', errorMsg);
+      return { success: false, error: errorMsg };
     }
   } catch (error) {
     console.error('USB ID print error:', error);
-    return { success: false, error: error.message || 'Failed to print via USB IDs' };
+    let errorMessage = error.message || 'Failed to print via USB IDs';
+    
+    // Provide more helpful error messages
+    if (errorMessage.includes('No such device') || errorMessage.includes('disconnected')) {
+      errorMessage = `USB device not accessible. Ensure: 1) Printer is connected, 2) Container has USB access (privileged mode), 3) USB devices are mounted. Original error: ${errorMessage}`;
+    }
+    
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -431,6 +463,126 @@ app.get('/api/printer/usb-ids', (req, res) => {
     configured: !!(usbVendorId && usbProductId)
   });
 });
+
+// Check USB device accessibility
+app.get('/api/printer/check-usb-access', async (req, res) => {
+  try {
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+    
+    const diagnostics = {
+      lsusb_available: false,
+      lsusb_output: '',
+      usb_devices: [],
+      configured_ids: {
+        vendor_id: usbVendorId,
+        product_id: usbProductId
+      },
+      device_found: false,
+      usb_bus_accessible: false
+    };
+    
+    // Check if lsusb is available
+    try {
+      const { stdout } = await execAsync('which lsusb 2>/dev/null || echo ""');
+      if (stdout.trim()) {
+        diagnostics.lsusb_available = true;
+        
+        // Run lsusb
+        try {
+          const { stdout: lsusbOutput } = await execAsync('lsusb 2>/dev/null || echo ""');
+          diagnostics.lsusb_output = lsusbOutput;
+          
+          // Parse devices
+          const lines = lsusbOutput.trim().split('\n').filter(line => line.trim());
+          diagnostics.usb_devices = lines.map(line => {
+            const match = line.match(/Bus\s+(\d+)\s+Device\s+(\d+):\s+ID\s+([0-9a-fA-F]{4}):([0-9a-fA-F]{4})\s+(.+)$/);
+            if (match) {
+              return {
+                bus: match[1],
+                device: match[2],
+                vendor_id: `0x${match[3]}`,
+                product_id: `0x${match[4]}`,
+                name: match[5].trim()
+              };
+            }
+            return null;
+          }).filter(d => d !== null);
+          
+          // Check if configured device is found
+          if (usbVendorId && usbProductId) {
+            const vendorHex = usbVendorId.replace('0x', '').toLowerCase();
+            const productHex = usbProductId.replace('0x', '').toLowerCase();
+            diagnostics.device_found = diagnostics.usb_devices.some(d => 
+              d.vendor_id.replace('0x', '').toLowerCase() === vendorHex &&
+              d.product_id.replace('0x', '').toLowerCase() === productHex
+            );
+          }
+        } catch (e) {
+          diagnostics.lsusb_error = e.message;
+        }
+      }
+    } catch (e) {
+      diagnostics.lsusb_error = e.message;
+    }
+    
+    // Check if /dev/bus/usb is accessible
+    const fs = require('fs');
+    try {
+      const usbBusExists = fs.existsSync('/dev/bus/usb');
+      diagnostics.usb_bus_accessible = usbBusExists;
+      
+      if (usbBusExists) {
+        try {
+          const busDirs = fs.readdirSync('/dev/bus/usb');
+          diagnostics.usb_bus_dirs = busDirs;
+        } catch (e) {
+          diagnostics.usb_bus_read_error = e.message;
+        }
+      }
+    } catch (e) {
+      diagnostics.usb_bus_error = e.message;
+    }
+    
+    res.json({
+      success: true,
+      diagnostics: diagnostics,
+      recommendations: getUSBRecommendations(diagnostics)
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+function getUSBRecommendations(diagnostics) {
+  const recommendations = [];
+  
+  if (!diagnostics.lsusb_available) {
+    recommendations.push('lsusb command not available. Install usbutils package.');
+  }
+  
+  if (!diagnostics.usb_bus_accessible) {
+    recommendations.push('/dev/bus/usb is not accessible. Ensure privileged mode and USB device mounting in docker-compose.yml');
+  }
+  
+  if (diagnostics.configured_ids.vendor_id && diagnostics.configured_ids.product_id) {
+    if (!diagnostics.device_found) {
+      recommendations.push(`Configured USB device (${diagnostics.configured_ids.vendor_id}:${diagnostics.configured_ids.product_id}) not found. Check: 1) Printer is connected, 2) Container has USB access, 3) Device IDs are correct`);
+    }
+  } else {
+    recommendations.push('USB vendor/product IDs not configured. Use the web interface to set them.');
+  }
+  
+  if (diagnostics.usb_devices.length === 0 && diagnostics.lsusb_available) {
+    recommendations.push('No USB devices detected. Ensure printer is connected and container has USB access.');
+  }
+  
+  return recommendations;
+}
 
 // Print text
 app.post('/api/print', async (req, res) => {

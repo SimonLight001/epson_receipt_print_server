@@ -251,6 +251,9 @@
                 <button type="button" class="btn-secondary" id="scanUsbBtn">
                     Scan USB
                 </button>
+                <button type="button" class="btn-secondary" id="checkUsbBtn" style="background: #ff9800; color: white;">
+                    Check USB Access
+                </button>
             </div>
         </form>
 
@@ -265,6 +268,7 @@
         const testBtn = document.getElementById('testBtn');
         const refreshBtn = document.getElementById('refreshBtn');
         const scanUsbBtn = document.getElementById('scanUsbBtn');
+        const checkUsbBtn = document.getElementById('checkUsbBtn');
         const statusMessage = document.getElementById('statusMessage');
         const printerStatus = document.getElementById('printerStatus');
         const statusText = document.getElementById('statusText');
@@ -304,6 +308,11 @@
         // Scan USB button
         scanUsbBtn.addEventListener('click', async () => {
             await scanUSBDevices();
+        });
+        
+        // Check USB Access button
+        checkUsbBtn.addEventListener('click', async () => {
+            await checkUSBAccess();
         });
 
         async function printText(text) {
@@ -658,11 +667,58 @@
             statusMessage.className = 'status';
         }
 
+        async function checkUSBAccess() {
+            setLoading(true);
+            hideStatus();
+            
+            try {
+                const response = await fetch(`${API_BASE}/printer/check-usb-access`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const diag = data.diagnostics;
+                    let message = '<strong>USB Access Diagnostics:</strong><br><br>';
+                    
+                    message += `<strong>lsusb Available:</strong> ${diag.lsusb_available ? '✅ Yes' : '❌ No'}<br>`;
+                    message += `<strong>USB Bus Accessible:</strong> ${diag.usb_bus_accessible ? '✅ Yes' : '❌ No'}<br>`;
+                    message += `<strong>USB Devices Found:</strong> ${diag.usb_devices.length}<br>`;
+                    
+                    if (diag.configured_ids.vendor_id && diag.configured_ids.product_id) {
+                        message += `<strong>Configured Device Found:</strong> ${diag.device_found ? '✅ Yes' : '❌ No'}<br>`;
+                        message += `<strong>Configured IDs:</strong> ${diag.configured_ids.vendor_id}:${diag.configured_ids.product_id}<br>`;
+                    }
+                    
+                    if (diag.usb_devices.length > 0) {
+                        message += '<br><strong>Detected USB Devices:</strong><br>';
+                        diag.usb_devices.forEach(device => {
+                            message += `• ${device.name} (${device.vendor_id}:${device.product_id})<br>`;
+                        });
+                    }
+                    
+                    if (data.recommendations && data.recommendations.length > 0) {
+                        message += '<br><strong>Recommendations:</strong><br>';
+                        data.recommendations.forEach(rec => {
+                            message += `⚠️ ${rec}<br>`;
+                        });
+                    }
+                    
+                    showStatus(message, diag.device_found && diag.usb_bus_accessible ? 'success' : 'error');
+                } else {
+                    showStatus(`❌ Error: ${data.error || 'Failed to check USB access'}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Network error: ${error.message}`, 'error');
+            } finally {
+                setLoading(false);
+            }
+        }
+        
         function setLoading(loading) {
             printBtn.disabled = loading;
             testBtn.disabled = loading;
             refreshBtn.disabled = loading;
             scanUsbBtn.disabled = loading;
+            checkUsbBtn.disabled = loading;
             
             if (loading) {
                 printBtn.innerHTML = 'Printing<span class="loading"></span>';
