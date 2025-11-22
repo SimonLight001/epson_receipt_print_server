@@ -207,6 +207,23 @@
                 <p style="font-weight: 600; margin-bottom: 8px;">USB Devices Found:</p>
                 <div id="usbDevicesList"></div>
             </div>
+            <div id="usbIdsSection" style="display: none; margin-top: 15px; padding: 10px; background: #e8f5e9; border-radius: 4px;">
+                <p style="font-weight: 600; margin-bottom: 8px;">USB Vendor/Product IDs:</p>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div>
+                        <label style="font-size: 12px;">Vendor ID:</label>
+                        <input type="text" id="vendorIdInput" placeholder="0x04b8" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; width: 100px;">
+                    </div>
+                    <div>
+                        <label style="font-size: 12px;">Product ID:</label>
+                        <input type="text" id="productIdInput" placeholder="0x0202" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; width: 100px;">
+                    </div>
+                    <button onclick="setUsbIds()" style="padding: 6px 12px; font-size: 12px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Set USB IDs
+                    </button>
+                </div>
+                <p id="usbIdsStatus" style="font-size: 12px; margin-top: 5px; color: #666;"></p>
+            </div>
         </div>
 
         <form id="printForm">
@@ -252,6 +269,10 @@
         const statusText = document.getElementById('statusText');
         const usbDevicesSection = document.getElementById('usbDevicesSection');
         const usbDevicesList = document.getElementById('usbDevicesList');
+        const usbIdsSection = document.getElementById('usbIdsSection');
+        const vendorIdInput = document.getElementById('vendorIdInput');
+        const productIdInput = document.getElementById('productIdInput');
+        const usbIdsStatus = document.getElementById('usbIdsStatus');
 
         // Check printer status on load
         checkPrinterStatus();
@@ -377,12 +398,27 @@
                         statusHtml += `<strong>📌 Current USB Device:</strong> <code>${data.currentUsbDevice}</code><br><br>`;
                     }
                     
+                    // Show USB IDs if configured
+                    if (data.usbVendorId && data.usbProductId) {
+                        statusHtml += `<strong>🔌 USB IDs:</strong> Vendor=${data.usbVendorId}, Product=${data.usbProductId}<br><br>`;
+                        usbIdsSection.style.display = 'block';
+                        vendorIdInput.value = data.usbVendorId;
+                        productIdInput.value = data.usbProductId;
+                        usbIdsStatus.textContent = 'USB IDs configured';
+                        usbIdsStatus.style.color = '#4caf50';
+                    } else {
+                        usbIdsSection.style.display = 'block';
+                        usbIdsStatus.textContent = 'USB IDs not configured. Set them below for direct USB printing.';
+                        usbIdsStatus.style.color = '#ff9800';
+                    }
+                    
                     if (!statusHtml) {
                         statusHtml = '⚠️ No printers or USB devices detected.<br><br>';
                         statusHtml += '<strong>To fix this:</strong><br>';
                         statusHtml += '1. Make sure your Epson printer is connected via USB<br>';
-                        statusHtml += '2. Add it in macOS: System Settings > Printers & Scanners<br>';
-                        statusHtml += '3. Or click "Scan USB" to find USB devices directly';
+                        statusHtml += '2. Configure USB Vendor/Product IDs below (recommended)<br>';
+                        statusHtml += '3. Or add it in macOS: System Settings > Printers & Scanners<br>';
+                        statusHtml += '4. Or click "Scan USB" to find USB devices directly';
                     }
                     
                     statusText.innerHTML = statusHtml;
@@ -427,6 +463,53 @@
             }
         }
 
+        // Set USB vendor/product IDs
+        window.setUsbIds = async function() {
+            const vendorId = vendorIdInput.value.trim();
+            const productId = productIdInput.value.trim();
+            
+            if (!vendorId || !productId) {
+                showStatus('Please enter both Vendor ID and Product ID', 'error');
+                return;
+            }
+            
+            setLoading(true);
+            hideStatus();
+            
+            try {
+                const response = await fetch(`${API_BASE}/printer/set-usb-ids`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        vendor_id: vendorId,
+                        product_id: productId
+                    }),
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus(`✅ ${data.message}`, 'success');
+                    usbIdsStatus.textContent = 'USB IDs configured successfully';
+                    usbIdsStatus.style.color = '#4caf50';
+                    // Refresh status to show updated IDs
+                    setTimeout(() => checkPrinterStatus(), 500);
+                } else {
+                    showStatus(`❌ Error: ${data.error || 'Failed to set USB IDs'}`, 'error');
+                    usbIdsStatus.textContent = 'Failed to set USB IDs';
+                    usbIdsStatus.style.color = '#f44336';
+                }
+            } catch (error) {
+                showStatus(`❌ Network error: ${error.message}`, 'error');
+                usbIdsStatus.textContent = 'Network error';
+                usbIdsStatus.style.color = '#f44336';
+            } finally {
+                setLoading(false);
+            }
+        };
+        
         // Make setUsbDevice globally accessible for onclick handlers
         window.setUsbDevice = async function(devicePath) {
             setLoading(true);

@@ -13,6 +13,9 @@ app.use(express.static('public'));
 // Initialize printer
 let printer = null;
 let usbDevicePath = null;
+// USB vendor/product IDs for direct USB printing (using python-escpos)
+let usbVendorId = process.env.USB_VENDOR_ID || null; // e.g., '0x04b8' or 1208
+let usbProductId = process.env.USB_PRODUCT_ID || null; // e.g., '0x0202' or 514
 
 // Scan for USB devices that might be the Epson printer
 async function scanUSBDevices() {
@@ -99,6 +102,72 @@ function initializePrinter(devicePath = null) {
   } catch (error) {
     console.error('Error initializing printer:', error);
     return false;
+  }
+}
+
+// Direct USB printing using Python escpos library (most reliable for USB)
+async function printViaUSBIds(text, cut = true) {
+  const { exec } = require('child_process');
+  const { promisify } = require('util');
+  const execAsync = promisify(exec);
+  const path = require('path');
+  
+  if (!usbVendorId || !usbProductId) {
+    return { success: false, error: 'USB vendor/product IDs not configured' };
+  }
+  
+  try {
+    const scriptPath = path.join(__dirname, 'print_usb.py');
+    const input = JSON.stringify({
+      vendor_id: usbVendorId,
+      product_id: usbProductId,
+      text: text,
+      cut: cut
+    });
+    
+    // Use spawn for better security and handling of special characters
+    const { spawn } = require('child_process');
+    const pythonProcess = spawn('python3', [scriptPath], {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    
+    let stdout = '';
+    let stderr = '';
+    
+    pythonProcess.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+    
+    pythonProcess.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+    
+    // Write input to stdin
+    pythonProcess.stdin.write(input);
+    pythonProcess.stdin.end();
+    
+    // Wait for process to complete
+    await new Promise((resolve, reject) => {
+      pythonProcess.on('close', (code) => {
+        if (code !== 0 && !stdout) {
+          reject(new Error(stderr || `Process exited with code ${code}`));
+        } else {
+          resolve();
+        }
+      });
+      pythonProcess.on('error', reject);
+    });
+    
+    try {
+      const result = JSON.parse(stdout.trim());
+      return result;
+    } catch (e) {
+      // If output is not JSON, treat as error
+      return { success: false, error: stdout || stderr || 'Unknown error' };
+    }
+  } catch (error) {
+    console.error('USB ID print error:', error);
+    return { success: false, error: error.message || 'Failed to print via USB IDs' };
   }
 }
 
@@ -204,9 +273,11 @@ app.get('/api/printer/status', async (req, res) => {
       systemPrinters: printers,
       usbDevices: usbDevices,
       currentUsbDevice: usbDevicePath,
-      message: printers.length > 0 || usbDevices.length > 0 
+      usbVendorId: usbVendorId,
+      usbProductId: usbProductId,
+      message: printers.length > 0 || usbDevices.length > 0 || (usbVendorId && usbProductId)
         ? 'Printers/devices found' 
-        : 'No printers or USB devices detected. Make sure your Epson printer is connected via USB.'
+        : 'No printers or USB devices detected. Make sure your Epson printer is connected via USB. You can also configure USB vendor/product IDs via /api/printer/set-usb-ids'
     });
   } catch (error) {
     res.status(500).json({
@@ -274,6 +345,46 @@ app.post('/api/printer/set-usb-device', async (req, res) => {
   }
 });
 
+// Set USB vendor/product IDs (for direct USB printing)
+app.post('/api/printer/set-usb-ids', async (req, res) => {
+  try {
+    const { vendor_id, product_id } = req.body;
+    
+    if (!vendor_id || !product_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both vendor_id and product_id are required'
+      });
+    }
+    
+    // Convert to string format if needed
+    usbVendorId = vendor_id.toString();
+    usbProductId = product_id.toString();
+    
+    res.json({
+      success: true,
+      message: `USB IDs set: Vendor=${usbVendorId}, Product=${usbProductId}`,
+      vendor_id: usbVendorId,
+      product_id: usbProductId
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get USB vendor/product IDs
+app.get('/api/printer/usb-ids', (req, res) => {
+  res.json({
+    success: true,
+    vendor_id: usbVendorId,
+    product_id: usbProductId,
+    configured: !!(usbVendorId && usbProductId)
+  });
+});
+
 // Print text
 app.post('/api/print', async (req, res) => {
   try {
@@ -286,7 +397,20 @@ app.post('/api/print', async (req, res) => {
       });
     }
     
-    // Try direct USB printing with thermal printer library first (if device is set)
+    // Try USB vendor/product ID printing first (most reliable for USB)
+    if (usbVendorId && usbProductId) {
+      const result = await printViaUSBIds(text, true);
+      if (result.success) {
+        return res.json({
+          success: true,
+          message: result.message || 'Printed via USB IDs'
+        });
+      }
+      // If USB ID printing fails, fall through to other methods
+      console.error('USB ID print failed, trying alternatives:', result.error);
+    }
+    
+    // Try direct USB printing with thermal printer library (if device is set)
     if (printer && usbDevicePath) {
       try {
         printer.clear();
@@ -359,22 +483,34 @@ app.post('/api/print/receipt', async (req, res) => {
   try {
     const { text, title, items } = req.body;
     
+    // Build receipt text
+    let receiptText = '';
+    if (title) receiptText += `\n${title}\n${'='.repeat(32)}\n`;
+    if (text) receiptText += `${text}\n`;
+    if (items && Array.isArray(items)) {
+      items.forEach(item => {
+        receiptText += `${item}\n`;
+      });
+    }
+    receiptText += '\n';
+    
+    // Try USB IDs first (most reliable)
+    if (usbVendorId && usbProductId) {
+      const result = await printViaUSBIds(receiptText, true);
+      if (result.success) {
+        return res.json({
+          success: true,
+          message: 'Receipt printed successfully via USB'
+        });
+      }
+    }
+    
     if (!printer) {
       initializePrinter();
     }
     
     if (!printer) {
       // Fallback to simple USB printing
-      let receiptText = '';
-      if (title) receiptText += `\n${title}\n${'='.repeat(32)}\n`;
-      if (text) receiptText += `${text}\n`;
-      if (items && Array.isArray(items)) {
-        items.forEach(item => {
-          receiptText += `${item}\n`;
-        });
-      }
-      receiptText += '\n';
-      
       const result = await printViaUSB(receiptText);
       return res.json({
         success: result.success,
@@ -439,7 +575,13 @@ is working correctly!
 ================================
 `;
     
-    const result = await printViaUSB(testText);
+    // Try USB IDs first
+    let result;
+    if (usbVendorId && usbProductId) {
+      result = await printViaUSBIds(testText, true);
+    } else {
+      result = await printViaUSB(testText);
+    }
     
     if (result.success) {
       res.json({

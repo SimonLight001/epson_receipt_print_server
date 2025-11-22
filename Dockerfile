@@ -1,7 +1,7 @@
 # Use Node.js LTS version on Debian-based image for better USB/printing support
 FROM node:18-slim
 
-# Install CUPS and printing utilities, plus USB tools
+# Install CUPS and printing utilities, plus USB tools, Python and pip
 RUN apt-get update && apt-get install -y \
     cups \
     cups-client \
@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
     printer-driver-all \
     usbutils \
     udev \
+    python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
@@ -20,9 +22,16 @@ COPY package*.json ./
 # Install dependencies
 RUN npm ci --only=production
 
+# Install Python dependencies for USB printing
+RUN pip3 install python-escpos pyusb
+
 # Copy application files
 COPY server.js ./
 COPY public/ ./public/
+COPY print_usb.py ./
+
+# Make Python script executable
+RUN chmod +x print_usb.py
 
 # Expose the port
 EXPOSE 3100
