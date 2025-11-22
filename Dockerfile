@@ -23,7 +23,8 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # Install Python dependencies for USB printing
-RUN pip3 install python-escpos pyusb
+# Using --break-system-packages is safe in Docker containers
+RUN pip3 install --break-system-packages python-escpos pyusb
 
 # Copy application files
 COPY server.js ./
