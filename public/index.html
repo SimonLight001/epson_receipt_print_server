@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Epson TM-T900F Printer Handler</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 120px;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            flex: 1;
+            min-width: 120px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-test {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-test:hover {
+            background: #45a049;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            display: block;
+        }
+
+        .printer-status {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .printer-status h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .printer-status p {
+            font-size: 13px;
+            color: #666;
+            margin: 5px 0;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖨️ Epson TM-T900F</h1>
+        <p class="subtitle">Printer Handler Web Interface</p>
+
+        <div class="printer-status" id="printerStatus">
+            <h3>Printer Status</h3>
+            <p id="statusText">Checking printer status...</p>
+            <div id="usbDevicesSection" style="display: none; margin-top: 15px;">
+                <p style="font-weight: 600; margin-bottom: 8px;">USB Devices Found:</p>
+                <div id="usbDevicesList"></div>
+            </div>
+        </div>
+
+        <form id="printForm">
+            <div class="form-group">
+                <label for="printText">Text to Print:</label>
+                <textarea 
+                    id="printText" 
+                    name="text" 
+                    placeholder="Enter text to print on the receipt printer..."
+                    required
+                ></textarea>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="btn-primary" id="printBtn">
+                    Print Text
+                </button>
+                <button type="button" class="btn-test" id="testBtn">
+                    Test Print
+                </button>
+                <button type="button" class="btn-secondary" id="refreshBtn">
+                    Refresh Status
+                </button>
+                <button type="button" class="btn-secondary" id="scanUsbBtn">
+                    Scan USB
+                </button>
+            </div>
+        </form>
+
+        <div class="status" id="statusMessage"></div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        
+        const printForm = document.getElementById('printForm');
+        const printBtn = document.getElementById('printBtn');
+        const testBtn = document.getElementById('testBtn');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const scanUsbBtn = document.getElementById('scanUsbBtn');
+        const statusMessage = document.getElementById('statusMessage');
+        const printerStatus = document.getElementById('printerStatus');
+        const statusText = document.getElementById('statusText');
+        const usbDevicesSection = document.getElementById('usbDevicesSection');
+        const usbDevicesList = document.getElementById('usbDevicesList');
+
+        // Check printer status on load
+        checkPrinterStatus();
+
+        // Print form submission
+        printForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = document.getElementById('printText').value.trim();
+            
+            if (!text) {
+                showStatus('Please enter some text to print', 'error');
+                return;
+            }
+
+            await printText(text);
+        });
+
+        // Test print button
+        testBtn.addEventListener('click', async () => {
+            await testPrint();
+        });
+
+        // Refresh status button
+        refreshBtn.addEventListener('click', () => {
+            checkPrinterStatus();
+        });
+
+        // Scan USB button
+        scanUsbBtn.addEventListener('click', async () => {
+            await scanUSBDevices();
+        });
+
+        async function printText(text) {
+            setLoading(true);
+            hideStatus();
+
+            try {
+                const response = await fetch(`${API_BASE}/print`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text }),
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatus(`✅ ${data.message}`, 'success');
+                    document.getElementById('printText').value = '';
+                } else {
+                    showStatus(`❌ Error: ${data.error || 'Failed to print'}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Network error: ${error.message}`, 'error');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function testPrint() {
+            setLoading(true);
+            hideStatus();
+
+            try {
+                const response = await fetch(`${API_BASE}/print/test`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatus(`✅ ${data.message}`, 'success');
+                } else {
+                    showStatus(`❌ Error: ${data.error || 'Failed to send test print'}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Network error: ${error.message}`, 'error');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function checkPrinterStatus() {
+            statusText.textContent = 'Checking printer status...';
+            usbDevicesSection.style.display = 'none';
+            
+            try {
+                const response = await fetch(`${API_BASE}/printer/status`);
+                const data = await response.json();
+
+                if (data.success) {
+                    let statusHtml = '';
+                    
+                    // Show system printers
+                    if (data.systemPrinters && data.systemPrinters.length > 0 && !data.systemPrinters[0].includes('No printers found')) {
+                        statusHtml += `<strong>✅ System Printers:</strong><br>${data.systemPrinters.map(p => `• ${p}`).join('<br>')}<br><br>`;
+                    }
+                    
+                    // Show USB devices
+                    if (data.usbDevices && data.usbDevices.length > 0) {
+                        statusHtml += `<strong>🔌 USB Devices Found:</strong><br>`;
+                        statusHtml += data.usbDevices.map(d => `• ${d}`).join('<br>');
+                        statusHtml += '<br><br>';
+                        
+                        // Show USB device list with set buttons
+                        usbDevicesList.innerHTML = data.usbDevices.map(device => `
+                            <div style="margin: 5px 0; padding: 8px; background: white; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+                                <code style="font-size: 12px;">${device}</code>
+                                <button onclick="setUsbDevice('${device}')" style="padding: 4px 12px; font-size: 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                    Use This Device
+                                </button>
+                            </div>
+                        `).join('');
+                        usbDevicesSection.style.display = 'block';
+                    }
+                    
+                    // Show current USB device
+                    if (data.currentUsbDevice) {
+                        statusHtml += `<strong>📌 Current USB Device:</strong> <code>${data.currentUsbDevice}</code><br><br>`;
+                    }
+                    
+                    if (!statusHtml) {
+                        statusHtml = '⚠️ No printers or USB devices detected.<br><br>';
+                        statusHtml += '<strong>To fix this:</strong><br>';
+                        statusHtml += '1. Make sure your Epson printer is connected via USB<br>';
+                        statusHtml += '2. Add it in macOS: System Settings > Printers & Scanners<br>';
+                        statusHtml += '3. Or click "Scan USB" to find USB devices directly';
+                    }
+                    
+                    statusText.innerHTML = statusHtml;
+                } else {
+                    statusText.textContent = `⚠️ ${data.error || 'Could not check printer status'}`;
+                }
+            } catch (error) {
+                statusText.textContent = `❌ Error checking status: ${error.message}`;
+            }
+        }
+
+        async function scanUSBDevices() {
+            setLoading(true);
+            hideStatus();
+            
+            try {
+                const response = await fetch(`${API_BASE}/printer/scan-usb`);
+                const data = await response.json();
+
+                if (data.success) {
+                    if (data.devices && data.devices.length > 0) {
+                        usbDevicesList.innerHTML = data.devices.map(device => `
+                            <div style="margin: 5px 0; padding: 8px; background: white; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+                                <code style="font-size: 12px;">${device}</code>
+                                <button onclick="setUsbDevice('${device}')" style="padding: 4px 12px; font-size: 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                    Use This Device
+                                </button>
+                            </div>
+                        `).join('');
+                        usbDevicesSection.style.display = 'block';
+                        showStatus(`✅ Found ${data.devices.length} USB device(s)`, 'success');
+                    } else {
+                        showStatus('⚠️ No USB devices found. Make sure your printer is connected via USB.', 'info');
+                    }
+                } else {
+                    showStatus(`❌ Error: ${data.error || 'Failed to scan USB devices'}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Network error: ${error.message}`, 'error');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // Make setUsbDevice globally accessible for onclick handlers
+        window.setUsbDevice = async function(devicePath) {
+            setLoading(true);
+            hideStatus();
+            
+            try {
+                const response = await fetch(`${API_BASE}/printer/set-usb-device`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ devicePath }),
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatus(`✅ ${data.message}`, 'success');
+                    // Refresh status to show the current device
+                    setTimeout(() => checkPrinterStatus(), 500);
+                } else {
+                    showStatus(`❌ Error: ${data.error || 'Failed to set USB device'}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Network error: ${error.message}`, 'error');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        function showStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = `status ${type}`;
+        }
+
+        function hideStatus() {
+            statusMessage.className = 'status';
+        }
+
+        function setLoading(loading) {
+            printBtn.disabled = loading;
+            testBtn.disabled = loading;
+            refreshBtn.disabled = loading;
+            scanUsbBtn.disabled = loading;
+            
+            if (loading) {
+                printBtn.innerHTML = 'Printing<span class="loading"></span>';
+            } else {
+                printBtn.textContent = 'Print Text';
+            }
+        }
+    </script>
+</body>
+</html>
+

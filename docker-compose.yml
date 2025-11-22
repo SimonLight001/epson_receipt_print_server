@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  epson-printer-handler:
+    build: .
+    container_name: epson-printer-handler
+    ports:
+      - "3100:3100"
+    # Grant access to USB devices
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    # Access to serial devices (for /dev/tty.* and /dev/cu.*)
+    volumes:
+      - /dev:/dev
+    # Privileged mode may be needed for USB device access
+    privileged: true
+    # Keep container running
+    restart: unless-stopped
+    environment:
+      - PORT=3100
+    # Optional: Mount CUPS socket if you want to use system CUPS
+    # volumes:
+    #   - /var/run/cups:/var/run/cups
+

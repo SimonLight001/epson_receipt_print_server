@@ -1,0 +1,22 @@
+{
+  "name": "epson-printer-handler",
+  "version": "1.0.0",
+  "description": "Web server for Epson TM-T900F receipt printer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": ["epson", "printer", "receipt", "tm-t900f"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "node-thermal-printer": "^4.4.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
+
