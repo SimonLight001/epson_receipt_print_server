@@ -7,8 +7,11 @@ version: '3.8'
 services:
   epson-printer-handler:
     # Use pre-built image (load with: docker load < epson-printer-handler.tar.gz)
+    # IMPORTANT: Load the image FIRST before deploying this stack!
+    # In Portainer: Images → Import image from file → Upload epson-printer-handler.tar.gz
     image: epson-printer-handler:latest
-    # To build from source instead, uncomment the line below and comment out the image line above
+    pull_policy: never  # Don't try to pull from registry, use local image only
+    # To build from source instead, uncomment the line below and comment out the image/pull_policy lines above
     # build: .
     container_name: epson-printer-handler
     ports:
