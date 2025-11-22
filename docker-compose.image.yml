@@ -1,15 +1,12 @@
 version: '3.8'
 
-# Docker Compose for Portainer - uses pre-built image
-# Make sure to load the image first: docker load < epson-printer-handler.tar.gz
-# Or import it via Portainer's Images section
+# Docker Compose file for using a pre-built image
+# Use this after loading the image with: docker load < epson-printer-handler.tar.gz
 
 services:
   epson-printer-handler:
-    # Use pre-built image (load with: docker load < epson-printer-handler.tar.gz)
+    # Use pre-built image (must be loaded first: docker load < epson-printer-handler.tar.gz)
     image: epson-printer-handler:latest
-    # To build from source instead, uncomment the line below and comment out the image line above
-    # build: .
     container_name: epson-printer-handler
     ports:
       - "${PORT:-3100}:${PORT:-3100}"
