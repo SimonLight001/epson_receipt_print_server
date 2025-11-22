@@ -287,10 +287,57 @@ app.get('/api/printer/status', async (req, res) => {
   }
 });
 
-// Scan for USB devices
+// Scan for USB devices (legacy - device paths)
 app.get('/api/printer/scan-usb', async (req, res) => {
   try {
     const devices = await scanUSBDevices();
+    res.json({
+      success: true,
+      devices: devices,
+      message: `Found ${devices.length} USB device(s)`
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Scan for USB devices using lsusb (shows vendor/product IDs and device names)
+app.get('/api/printer/scan-usb-lsusb', async (req, res) => {
+  try {
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+    
+    // Run lsusb to get USB device information
+    const { stdout } = await execAsync('lsusb 2>/dev/null || echo ""');
+    
+    const devices = [];
+    const lines = stdout.trim().split('\n').filter(line => line.trim());
+    
+    // Parse lsusb output format: Bus 001 Device 003: ID 04b8:0202 Seiko Epson Corp. TM-T88V
+    for (const line of lines) {
+      const match = line.match(/ID\s+([0-9a-fA-F]{4}):([0-9a-fA-F]{4})\s+(.+)$/);
+      if (match) {
+        const vendorId = match[1];
+        const productId = match[2];
+        const deviceName = match[3].trim();
+        
+        devices.push({
+          vendor_id: `0x${vendorId}`,
+          product_id: `0x${productId}`,
+          vendor_id_decimal: parseInt(vendorId, 16),
+          product_id_decimal: parseInt(productId, 16),
+          name: deviceName,
+          display_name: deviceName,
+          // Extract just the model name if available (e.g., "TM-T88V" from "Seiko Epson Corp. TM-T88V")
+          model: deviceName.match(/\b(TM-[A-Z0-9]+)\b/i)?.[1] || deviceName
+        });
+      }
+    }
+    
     res.json({
       success: true,
       devices: devices,

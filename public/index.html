@@ -204,7 +204,8 @@
             <h3>Printer Status</h3>
             <p id="statusText">Checking printer status...</p>
             <div id="usbDevicesSection" style="display: none; margin-top: 15px;">
-                <p style="font-weight: 600; margin-bottom: 8px;">USB Devices Found:</p>
+                <p style="font-weight: 600; margin-bottom: 8px; font-size: 14px;">USB Devices Found:</p>
+                <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Click on a device name to automatically configure it</p>
                 <div id="usbDevicesList"></div>
             </div>
             <div id="usbIdsSection" style="display: none; margin-top: 15px; padding: 10px; background: #e8f5e9; border-radius: 4px;">
@@ -435,21 +436,43 @@
             hideStatus();
             
             try {
-                const response = await fetch(`${API_BASE}/printer/scan-usb`);
+                // Use the new lsusb endpoint that provides vendor/product IDs
+                const response = await fetch(`${API_BASE}/printer/scan-usb-lsusb`);
                 const data = await response.json();
 
                 if (data.success) {
                     if (data.devices && data.devices.length > 0) {
-                        usbDevicesList.innerHTML = data.devices.map(device => `
-                            <div style="margin: 5px 0; padding: 8px; background: white; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
-                                <code style="font-size: 12px;">${device}</code>
-                                <button onclick="setUsbDevice('${device}')" style="padding: 4px 12px; font-size: 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                                    Use This Device
-                                </button>
+                        usbDevicesList.innerHTML = data.devices.map(device => {
+                            const tooltipId = `tooltip-${device.vendor_id}-${device.product_id}`;
+                            return `
+                            <div style="margin: 8px 0; padding: 12px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; cursor: pointer; transition: all 0.2s;" 
+                                 onclick="selectUsbDevice('${device.vendor_id}', '${device.product_id}')"
+                                 onmouseover="this.style.borderColor='#667eea'; this.style.boxShadow='0 2px 4px rgba(102,126,234,0.2)'"
+                                 onmouseout="this.style.borderColor='#e0e0e0'; this.style.boxShadow='none'">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; font-size: 14px; color: #333; margin-bottom: 4px;">
+                                            ${device.display_name}
+                                        </div>
+                                        <div style="font-size: 12px; color: #666;">
+                                            <span style="position: relative;">
+                                                Vendor: ${device.vendor_id} | Product: ${device.product_id}
+                                                <span style="margin-left: 4px; color: #667eea; cursor: help; font-weight: bold;" 
+                                                      onmouseover="showTooltip(event, '${device.vendor_id}', '${device.product_id}', ${device.vendor_id_decimal}, ${device.product_id_decimal})"
+                                                      onmouseout="hideTooltip()">?</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <button onclick="event.stopPropagation(); selectUsbDevice('${device.vendor_id}', '${device.product_id}')" 
+                                            style="padding: 6px 16px; font-size: 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                                        Select
+                                    </button>
+                                </div>
                             </div>
-                        `).join('');
+                            `;
+                        }).join('');
                         usbDevicesSection.style.display = 'block';
-                        showStatus(`✅ Found ${data.devices.length} USB device(s)`, 'success');
+                        showStatus(`✅ Found ${data.devices.length} USB device(s). Click a device to configure it.`, 'success');
                     } else {
                         showStatus('⚠️ No USB devices found. Make sure your printer is connected via USB.', 'info');
                     }
@@ -462,6 +485,63 @@
                 setLoading(false);
             }
         }
+        
+        // Tooltip functions
+        let tooltipElement = null;
+        
+        function showTooltip(event, vendorId, productId, vendorDecimal, productDecimal) {
+            // Remove existing tooltip
+            if (tooltipElement) {
+                tooltipElement.remove();
+            }
+            
+            // Create tooltip
+            tooltipElement = document.createElement('div');
+            tooltipElement.style.cssText = `
+                position: absolute;
+                background: #333;
+                color: white;
+                padding: 8px 12px;
+                border-radius: 4px;
+                font-size: 11px;
+                z-index: 10000;
+                pointer-events: none;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                max-width: 250px;
+                line-height: 1.4;
+            `;
+            tooltipElement.innerHTML = `
+                <strong>USB IDs:</strong><br>
+                Hex: ${vendorId} : ${productId}<br>
+                Decimal: ${vendorDecimal} : ${productDecimal}
+            `;
+            
+            document.body.appendChild(tooltipElement);
+            
+            // Position tooltip
+            const rect = event.target.getBoundingClientRect();
+            tooltipElement.style.left = (rect.right + 10) + 'px';
+            tooltipElement.style.top = (rect.top - 10) + 'px';
+        }
+        
+        function hideTooltip() {
+            if (tooltipElement) {
+                tooltipElement.remove();
+                tooltipElement = null;
+            }
+        }
+        
+        // Select USB device and auto-fill IDs (make it globally accessible)
+        window.selectUsbDevice = function(vendorId, productId) {
+            vendorIdInput.value = vendorId;
+            productIdInput.value = productId;
+            
+            // Show feedback
+            showStatus('Configuring USB IDs...', 'info');
+            
+            // Auto-set the IDs
+            setUsbIds();
+        };
 
         // Set USB vendor/product IDs
         window.setUsbIds = async function() {
