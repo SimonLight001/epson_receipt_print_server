@@ -7,7 +7,7 @@ import sys
 import json
 from escpos.printer import Usb
 
-def print_text(vendor_id, product_id, text, cut=True):
+def print_text(vendor_id, product_id, text, cut=True, interface=0):
     """
     Print text to USB printer using vendor/product IDs
     
@@ -16,6 +16,7 @@ def print_text(vendor_id, product_id, text, cut=True):
         product_id: USB product ID (hex, e.g., 0x0202)
         text: Text to print
         cut: Whether to cut paper after printing
+        interface: USB interface number (default 0)
     """
     try:
         # Convert hex strings to integers if needed
@@ -24,8 +25,21 @@ def print_text(vendor_id, product_id, text, cut=True):
         if isinstance(product_id, str):
             product_id = int(product_id, 16) if product_id.startswith('0x') else int(product_id)
         
-        # Initialize printer
-        p = Usb(vendor_id, product_id)
+        # Initialize printer - try with interface parameter
+        # Usb(vid, pid, interface, in_ep, out_ep)
+        try:
+            p = Usb(vendor_id, product_id, interface)
+        except Exception as e1:
+            # If that fails, try without interface (some printers don't need it)
+            try:
+                p = Usb(vendor_id, product_id)
+            except Exception as e2:
+                # Try with explicit endpoints (common for Epson printers)
+                # Most Epson printers use interface 0, in_ep=0x82, out_ep=0x01
+                try:
+                    p = Usb(vendor_id, product_id, interface, 0x82, 0x01)
+                except Exception as e3:
+                    raise Exception(f"Failed to initialize printer. Tried: with interface ({e1}), without interface ({e2}), with endpoints ({e3})")
         
         # Print text
         p.text(text)
@@ -46,11 +60,12 @@ def main():
         product_id = input_data.get('product_id')
         text = input_data.get('text', '')
         cut = input_data.get('cut', True)
+        interface = input_data.get('interface', 0)
         
         if not vendor_id or not product_id:
             result = {"success": False, "error": "vendor_id and product_id are required"}
         else:
-            result = print_text(vendor_id, product_id, text, cut)
+            result = print_text(vendor_id, product_id, text, cut, interface)
         
         # Output result as JSON
         print(json.dumps(result))

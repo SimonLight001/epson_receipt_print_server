@@ -443,27 +443,33 @@
                 if (data.success) {
                     if (data.devices && data.devices.length > 0) {
                         usbDevicesList.innerHTML = data.devices.map(device => {
-                            const tooltipId = `tooltip-${device.vendor_id}-${device.product_id}`;
+                            // Escape quotes in device names and IDs for safe HTML insertion
+                            const safeVendorId = String(device.vendor_id).replace(/'/g, "\\'");
+                            const safeProductId = String(device.product_id).replace(/'/g, "\\'");
+                            const safeDisplayName = String(device.display_name).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                            
                             return `
                             <div style="margin: 8px 0; padding: 12px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; cursor: pointer; transition: all 0.2s;" 
-                                 onclick="selectUsbDevice('${device.vendor_id}', '${device.product_id}')"
+                                 data-vendor-id="${safeVendorId}" 
+                                 data-product-id="${safeProductId}"
+                                 onclick="selectUsbDeviceFromElement(this)"
                                  onmouseover="this.style.borderColor='#667eea'; this.style.boxShadow='0 2px 4px rgba(102,126,234,0.2)'"
                                  onmouseout="this.style.borderColor='#e0e0e0'; this.style.boxShadow='none'">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
                                     <div style="flex: 1;">
                                         <div style="font-weight: 600; font-size: 14px; color: #333; margin-bottom: 4px;">
-                                            ${device.display_name}
+                                            ${safeDisplayName}
                                         </div>
                                         <div style="font-size: 12px; color: #666;">
                                             <span style="position: relative;">
                                                 Vendor: ${device.vendor_id} | Product: ${device.product_id}
                                                 <span style="margin-left: 4px; color: #667eea; cursor: help; font-weight: bold;" 
-                                                      onmouseover="showTooltip(event, '${device.vendor_id}', '${device.product_id}', ${device.vendor_id_decimal}, ${device.product_id_decimal})"
+                                                      onmouseover="showTooltip(event, '${safeVendorId}', '${safeProductId}', ${device.vendor_id_decimal}, ${device.product_id_decimal})"
                                                       onmouseout="hideTooltip()">?</span>
                                             </span>
                                         </div>
                                     </div>
-                                    <button onclick="event.stopPropagation(); selectUsbDevice('${device.vendor_id}', '${device.product_id}')" 
+                                    <button onclick="event.stopPropagation(); selectUsbDevice('${safeVendorId}', '${safeProductId}')" 
                                             style="padding: 6px 16px; font-size: 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
                                         Select
                                     </button>
@@ -533,6 +539,13 @@
         
         // Select USB device and auto-fill IDs (make it globally accessible)
         window.selectUsbDevice = function(vendorId, productId) {
+            console.log('selectUsbDevice called with:', vendorId, productId);
+            
+            if (!vendorId || !productId) {
+                showStatus('Error: Invalid vendor or product ID', 'error');
+                return;
+            }
+            
             vendorIdInput.value = vendorId;
             productIdInput.value = productId;
             
@@ -542,11 +555,20 @@
             // Auto-set the IDs
             setUsbIds();
         };
+        
+        // Alternative function that reads from data attributes (safer)
+        window.selectUsbDeviceFromElement = function(element) {
+            const vendorId = element.getAttribute('data-vendor-id');
+            const productId = element.getAttribute('data-product-id');
+            selectUsbDevice(vendorId, productId);
+        };
 
         // Set USB vendor/product IDs
         window.setUsbIds = async function() {
             const vendorId = vendorIdInput.value.trim();
             const productId = productIdInput.value.trim();
+            
+            console.log('setUsbIds called with:', vendorId, productId);
             
             if (!vendorId || !productId) {
                 showStatus('Please enter both Vendor ID and Product ID', 'error');
@@ -557,18 +579,24 @@
             hideStatus();
             
             try {
+                const requestBody = { 
+                    vendor_id: vendorId,
+                    product_id: productId
+                };
+                
+                console.log('Sending request:', requestBody);
+                
                 const response = await fetch(`${API_BASE}/printer/set-usb-ids`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ 
-                        vendor_id: vendorId,
-                        product_id: productId
-                    }),
+                    body: JSON.stringify(requestBody),
                 });
                 
                 const data = await response.json();
+                
+                console.log('Response:', data);
                 
                 if (data.success) {
                     showStatus(`✅ ${data.message}`, 'success');
@@ -578,12 +606,13 @@
                     setTimeout(() => checkPrinterStatus(), 500);
                 } else {
                     showStatus(`❌ Error: ${data.error || 'Failed to set USB IDs'}`, 'error');
-                    usbIdsStatus.textContent = 'Failed to set USB IDs';
+                    usbIdsStatus.textContent = 'Failed to set USB IDs: ' + (data.error || 'Unknown error');
                     usbIdsStatus.style.color = '#f44336';
                 }
             } catch (error) {
+                console.error('Error setting USB IDs:', error);
                 showStatus(`❌ Network error: ${error.message}`, 'error');
-                usbIdsStatus.textContent = 'Network error';
+                usbIdsStatus.textContent = 'Network error: ' + error.message;
                 usbIdsStatus.style.color = '#f44336';
             } finally {
                 setLoading(false);
