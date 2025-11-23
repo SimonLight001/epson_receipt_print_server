@@ -105,6 +105,11 @@ function initializePrinter(devicePath = null) {
   }
 }
 
+// Helper function to add top margin (5 newlines) to text
+function addTopMargin(text) {
+  return '\n'.repeat(5) + text;
+}
+
 // Direct USB printing using Python escpos library (most reliable for USB)
 async function printViaUSBIds(text, cut = true) {
   const { exec } = require('child_process');
@@ -131,11 +136,14 @@ async function printViaUSBIds(text, cut = true) {
       console.warn('Could not run lsusb to verify device:', e.message);
     }
     
+    // Add top margin to text
+    const textWithMargin = addTopMargin(text);
+    
     const scriptPath = path.join(__dirname, 'print_usb.py');
     const input = JSON.stringify({
       vendor_id: usbVendorId,
       product_id: usbProductId,
-      text: text,
+      text: textWithMargin,
       cut: cut
     });
     
@@ -645,6 +653,10 @@ app.post('/api/print', async (req, res) => {
     if (printer && usbDevicePath) {
       try {
         printer.clear();
+        // Add top margin (5 newlines)
+        for (let i = 0; i < 5; i++) {
+          printer.newLine();
+        }
         printer.alignLeft();
         printer.println(text);
         printer.cut();
@@ -661,8 +673,8 @@ app.post('/api/print', async (req, res) => {
       }
     }
     
-    // Try system printer (lp command)
-    const result = await printViaUSB(text);
+    // Try system printer (lp command) - add margin to text
+    const result = await printViaUSB(addTopMargin(text));
     
     if (result.success) {
       res.json({
@@ -678,6 +690,10 @@ app.post('/api/print', async (req, res) => {
       if (printer && !usbDevicePath) {
         try {
           printer.clear();
+          // Add top margin (5 newlines)
+          for (let i = 0; i < 5; i++) {
+            printer.newLine();
+          }
           printer.alignLeft();
           printer.println(text);
           printer.cut();
@@ -714,7 +730,7 @@ app.post('/api/print/receipt', async (req, res) => {
   try {
     const { text, title, items } = req.body;
     
-    // Build receipt text
+    // Build receipt text (margin will be added by print functions)
     let receiptText = '';
     if (title) receiptText += `\n${title}\n${'='.repeat(32)}\n`;
     if (text) receiptText += `${text}\n`;
@@ -751,6 +767,10 @@ app.post('/api/print/receipt', async (req, res) => {
     
     // Use thermal printer library for formatted printing
     printer.clear();
+    // Add top margin (5 newlines)
+    for (let i = 0; i < 5; i++) {
+      printer.newLine();
+    }
     if (title) {
       printer.alignCenter();
       printer.setTextSize(1, 1);
@@ -843,6 +863,10 @@ app.post('/api/print/tasks', async (req, res) => {
     if (printer) {
       try {
         printer.clear();
+        // Add top margin (5 newlines)
+        for (let i = 0; i < 5; i++) {
+          printer.newLine();
+        }
         
         // Heading (center aligned)
         printer.alignCenter();
@@ -875,7 +899,7 @@ app.post('/api/print/tasks', async (req, res) => {
       }
     }
     
-    // Fallback to simple USB printing
+    // Fallback to simple USB printing (margin will be added by printViaUSB)
     const result = await printViaUSB(formattedText);
     if (result.success) {
       return res.json({
@@ -900,6 +924,7 @@ app.post('/api/print/tasks', async (req, res) => {
 // Test print
 app.post('/api/print/test', async (req, res) => {
   try {
+    // Build test text (margin will be added by print functions)
     const testText = `
 ================================
     EPSON PRINTER TEST
