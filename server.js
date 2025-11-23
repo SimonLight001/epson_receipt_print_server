@@ -105,9 +105,10 @@ function initializePrinter(devicePath = null) {
   }
 }
 
-// Helper function to add top margin (5 newlines) to text
+// Helper function to add top margin (5 lines of dots) to text
+// Using dots instead of newlines as thermal printers may not handle leading newlines well
 function addTopMargin(text) {
-  return '\n'.repeat(5) + text;
+  return '.'.repeat(1) + '\n'.repeat(5) + text;
 }
 
 // Direct USB printing using Python escpos library (most reliable for USB)
@@ -653,11 +654,12 @@ app.post('/api/print', async (req, res) => {
     if (printer && usbDevicePath) {
       try {
         printer.clear();
-        // Add top margin (5 newlines)
+        // Add top margin (5 lines with dots)
+        printer.alignLeft();
+        printer.println('.');
         for (let i = 0; i < 5; i++) {
           printer.newLine();
         }
-        printer.alignLeft();
         printer.println(text);
         printer.cut();
         await printer.execute();
@@ -690,11 +692,12 @@ app.post('/api/print', async (req, res) => {
       if (printer && !usbDevicePath) {
         try {
           printer.clear();
-          // Add top margin (5 newlines)
+          // Add top margin (5 lines with dots)
+          printer.alignLeft();
+          printer.println('.');
           for (let i = 0; i < 5; i++) {
             printer.newLine();
           }
-          printer.alignLeft();
           printer.println(text);
           printer.cut();
           await printer.execute();
@@ -767,7 +770,9 @@ app.post('/api/print/receipt', async (req, res) => {
     
     // Use thermal printer library for formatted printing
     printer.clear();
-    // Add top margin (5 newlines)
+    // Add top margin (5 lines with dots)
+    printer.alignLeft();
+    printer.println('.');
     for (let i = 0; i < 5; i++) {
       printer.newLine();
     }
@@ -863,7 +868,9 @@ app.post('/api/print/tasks', async (req, res) => {
     if (printer) {
       try {
         printer.clear();
-        // Add top margin (5 newlines)
+        // Add top margin (5 lines with dots)
+        printer.alignLeft();
+        printer.println('.');
         for (let i = 0; i < 5; i++) {
           printer.newLine();
         }
