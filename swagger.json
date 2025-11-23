@@ -1,0 +1,424 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Epson Printer Handler API",
+    "version": "1.0.0",
+    "description": "API for controlling Epson TM-T900F receipt printer. This API allows printing text, receipts, and structured task lists to a USB-connected Epson thermal printer.",
+    "contact": {
+      "name": "API Support"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3100",
+      "description": "Local development server"
+    },
+    {
+      "url": "http://{host}:{port}",
+      "description": "Production server",
+      "variables": {
+        "host": {
+          "default": "localhost",
+          "description": "Server hostname or IP address"
+        },
+        "port": {
+          "default": "3100",
+          "description": "Server port"
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Check if the server is running and healthy",
+        "operationId": "healthCheck",
+        "tags": ["Health"],
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "ok",
+                  "message": "Server is running"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/printer/status": {
+      "get": {
+        "summary": "Get printer status",
+        "description": "Retrieve the current status of the printer, including configured USB devices and USB vendor/product IDs",
+        "operationId": "getPrinterStatus",
+        "tags": ["Printer"],
+        "responses": {
+          "200": {
+            "description": "Printer status information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "systemPrinters": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "usbDevices": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "usbVendorId": {
+                      "type": "string",
+                      "description": "Configured USB vendor ID (e.g., 0x04b8)"
+                    },
+                    "usbProductId": {
+                      "type": "string",
+                      "description": "Configured USB product ID (e.g., 0x0e02)"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/print/tasks": {
+      "post": {
+        "summary": "Print task list",
+        "description": "Print a structured task list with heading, date/time, and checkboxes. This endpoint is designed for AI agents to print task lists. The output format includes: a centered heading, right-aligned date/time, and left-aligned tasks with checkboxes.",
+        "operationId": "printTasks",
+        "tags": ["Printing"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["heading", "tasks"],
+                "properties": {
+                  "heading": {
+                    "type": "string",
+                    "description": "Task list heading (will be center-aligned)",
+                    "example": "Task Heading"
+                  },
+                  "tasks": {
+                    "type": "array",
+                    "description": "Array of task strings (each will be printed with a checkbox [ ])",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "example": ["Task 1", "Task 2", "Task 3"]
+                  }
+                }
+              },
+              "examples": {
+                "basic": {
+                  "summary": "Basic task list",
+                  "value": {
+                    "heading": "Daily Tasks",
+                    "tasks": ["Complete project documentation", "Review code changes", "Update API documentation"]
+                  }
+                },
+                "shopping": {
+                  "summary": "Shopping list",
+                  "value": {
+                    "heading": "Shopping List",
+                    "tasks": ["Milk", "Bread", "Eggs", "Butter"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tasks printed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Tasks printed successfully"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing or invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "Heading is required"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error - printing failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "Failed to print tasks"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/print": {
+      "post": {
+        "summary": "Print plain text",
+        "description": "Print plain text to the printer",
+        "operationId": "printText",
+        "tags": ["Printing"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["text"],
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "description": "Text to print",
+                    "example": "Hello, World!"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Text printed successfully"
+          },
+          "400": {
+            "description": "Bad request - text field is required"
+          },
+          "500": {
+            "description": "Server error - printing failed"
+          }
+        }
+      }
+    },
+    "/api/print/receipt": {
+      "post": {
+        "summary": "Print formatted receipt",
+        "description": "Print a formatted receipt with title, text, and items",
+        "operationId": "printReceipt",
+        "tags": ["Printing"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "Receipt title"
+                  },
+                  "text": {
+                    "type": "string",
+                    "description": "Additional text"
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "List of items to print"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Receipt printed successfully"
+          },
+          "500": {
+            "description": "Server error - printing failed"
+          }
+        }
+      }
+    },
+    "/api/printer/set-usb-ids": {
+      "post": {
+        "summary": "Configure USB vendor/product IDs",
+        "description": "Set the USB vendor and product IDs for direct USB printing",
+        "operationId": "setUsbIds",
+        "tags": ["Printer"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["vendor_id", "product_id"],
+                "properties": {
+                  "vendor_id": {
+                    "type": "string",
+                    "description": "USB vendor ID in hex format (e.g., 0x04b8) or decimal",
+                    "example": "0x04b8"
+                  },
+                  "product_id": {
+                    "type": "string",
+                    "description": "USB product ID in hex format (e.g., 0x0e02) or decimal",
+                    "example": "0x0e02"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "USB IDs configured successfully"
+          },
+          "400": {
+            "description": "Bad request - both vendor_id and product_id are required"
+          }
+        }
+      }
+    },
+    "/api/printer/scan-usb-lsusb": {
+      "get": {
+        "summary": "Scan for USB devices",
+        "description": "Scan for USB devices using lsusb command. Returns list of USB devices with vendor/product IDs and names.",
+        "operationId": "scanUsbDevices",
+        "tags": ["Printer"],
+        "responses": {
+          "200": {
+            "description": "List of USB devices",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "devices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "vendor_id": {
+                            "type": "string"
+                          },
+                          "product_id": {
+                            "type": "string"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Health check endpoints"
+    },
+    {
+      "name": "Printer",
+      "description": "Printer configuration and status endpoints"
+    },
+    {
+      "name": "Printing",
+      "description": "Printing endpoints for text, receipts, and task lists"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message"
+          }
+        }
+      },
+      "Success": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string",
+            "description": "Success message"
+          }
+        }
+      }
+    }
+  }
+}
+

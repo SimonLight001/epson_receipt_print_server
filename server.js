@@ -286,6 +286,38 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
+// Swagger/OpenAPI documentation endpoint
+app.get('/api/docs', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  try {
+    const swaggerPath = path.join(__dirname, 'swagger.json');
+    const swaggerDoc = JSON.parse(fs.readFileSync(swaggerPath, 'utf8'));
+    res.json(swaggerDoc);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to load API documentation',
+      message: error.message
+    });
+  }
+});
+
+// Swagger JSON endpoint (alternative path)
+app.get('/swagger.json', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  try {
+    const swaggerPath = path.join(__dirname, 'swagger.json');
+    const swaggerDoc = JSON.parse(fs.readFileSync(swaggerPath, 'utf8'));
+    res.json(swaggerDoc);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to load API documentation',
+      message: error.message
+    });
+  }
+});
+
 // Get printer status
 app.get('/api/printer/status', async (req, res) => {
   try {
@@ -755,6 +787,116 @@ app.post('/api/print/receipt', async (req, res) => {
   }
 });
 
+// Print tasks with structured format
+app.post('/api/print/tasks', async (req, res) => {
+  try {
+    const { heading, tasks } = req.body;
+    
+    if (!heading) {
+      return res.status(400).json({
+        success: false,
+        error: 'Heading is required'
+      });
+    }
+    
+    if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Tasks array is required and must not be empty'
+      });
+    }
+    
+    // Format date/time (e.g., "23 Nov 15:13")
+    const now = new Date();
+    const day = now.getDate();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = monthNames[now.getMonth()];
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const dateTime = `${day} ${month} ${hours}:${minutes}`;
+    
+    // Build formatted text for USB printing (fallback)
+    let formattedText = `\n${heading}\n\n`;
+    formattedText += `${dateTime}\n\n`;
+    tasks.forEach(task => {
+      formattedText += `  [ ] ${task}\n`;
+    });
+    formattedText += '\n';
+    
+    // Try USB IDs first (most reliable)
+    if (usbVendorId && usbProductId) {
+      const result = await printViaUSBIds(formattedText, true);
+      if (result.success) {
+        return res.json({
+          success: true,
+          message: 'Tasks printed successfully via USB'
+        });
+      }
+      console.error('USB ID print failed, trying alternatives:', result.error);
+    }
+    
+    // Try using thermal printer library for proper formatting
+    if (!printer) {
+      initializePrinter();
+    }
+    
+    if (printer) {
+      try {
+        printer.clear();
+        
+        // Heading (center aligned)
+        printer.alignCenter();
+        printer.setTextNormal();
+        printer.println(heading);
+        printer.newLine();
+        
+        // Date/time (right aligned)
+        printer.alignRight();
+        printer.println(dateTime);
+        printer.newLine();
+        
+        // Tasks with checkboxes (left aligned)
+        printer.alignLeft();
+        tasks.forEach(task => {
+          printer.println(`  [ ] ${task}`);
+        });
+        
+        printer.newLine();
+        printer.cut();
+        await printer.execute();
+        
+        return res.json({
+          success: true,
+          message: 'Tasks printed successfully'
+        });
+      } catch (thermalError) {
+        console.error('Thermal printer error:', thermalError);
+        // Fall through to text-based printing
+      }
+    }
+    
+    // Fallback to simple USB printing
+    const result = await printViaUSB(formattedText);
+    if (result.success) {
+      return res.json({
+        success: true,
+        message: result.message || 'Tasks printed successfully'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Failed to print tasks'
+    });
+  } catch (error) {
+    console.error('Tasks print error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Test print
 app.post('/api/print/test', async (req, res) => {
   try {
@@ -802,11 +944,56 @@ is working correctly!
   }
 });
 
+// Auto-detect Epson USB devices on startup
+async function autoDetectEpsonDevice() {
+  try {
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+    
+    // Run lsusb to find Epson devices
+    try {
+      const { stdout } = await execAsync('lsusb 2>/dev/null || echo ""');
+      const lines = stdout.trim().split('\n').filter(line => line.trim());
+      
+      for (const line of lines) {
+        // Check if line contains "Epson" (case insensitive)
+        if (line.match(/Epson/i)) {
+          const match = line.match(/ID\s+([0-9a-fA-F]{4}):([0-9a-fA-F]{4})/);
+          if (match) {
+            const vendorId = `0x${match[1]}`;
+            const productId = `0x${match[2]}`;
+            
+            usbVendorId = vendorId;
+            usbProductId = productId;
+            
+            console.log(`✅ Auto-detected Epson USB device: ${vendorId}:${productId}`);
+            console.log(`   Device: ${line}`);
+            return { vendorId, productId, deviceLine: line };
+          }
+        }
+      }
+      
+      console.log('ℹ️  No Epson USB devices found on startup');
+      return null;
+    } catch (e) {
+      console.log('ℹ️  Could not auto-detect USB devices (lsusb not available or no USB access)');
+      return null;
+    }
+  } catch (error) {
+    console.error('Error auto-detecting Epson device:', error);
+    return null;
+  }
+}
+
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`API endpoints available at http://localhost:${PORT}/api`);
   console.log(`Web interface available at http://localhost:${PORT}`);
+  
+  // Try to auto-detect Epson USB device
+  await autoDetectEpsonDevice();
   
   // Try to initialize printer on startup
   initializePrinter();

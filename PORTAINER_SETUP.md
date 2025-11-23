@@ -53,7 +53,10 @@ docker images | grep epson-printer-handler
 - The `docker-compose.yml` is configured to use the pre-built image (`epson-printer-handler:latest`)
 - Make sure the image is loaded before deploying, otherwise the stack will fail to start
 - The stack uses `stack.env` for environment variables (PORT=3100)
-- USB device access requires privileged mode (already configured)
+- **USB device access requires:**
+  - `privileged: true` mode
+  - `--device=/dev/bus/usb:/dev/bus/usb` (already configured in docker-compose.yml)
+  - USB devices mounted via volumes (already configured)
 
 ## Troubleshooting
 

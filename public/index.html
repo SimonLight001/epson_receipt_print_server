@@ -225,6 +225,22 @@
                 </div>
                 <p id="usbIdsStatus" style="font-size: 12px; margin-top: 5px; color: #666;"></p>
             </div>
+            <div id="manualUsbIdsSection" style="display: none; margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 4px; border: 1px solid #ffc107;">
+                <p style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">Manual USB ID Entry:</p>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div>
+                        <label style="font-size: 12px;">Vendor ID:</label>
+                        <input type="text" id="manualVendorIdInput" placeholder="0x04b8" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; width: 100px;">
+                    </div>
+                    <div>
+                        <label style="font-size: 12px;">Product ID:</label>
+                        <input type="text" id="manualProductIdInput" placeholder="0x0e02" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; width: 100px;">
+                    </div>
+                    <button onclick="setManualUsbIds()" style="padding: 6px 12px; font-size: 12px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Set Manually
+                    </button>
+                </div>
+            </div>
         </div>
 
         <form id="printForm">
@@ -410,15 +426,17 @@
                     
                     // Show USB IDs if configured
                     if (data.usbVendorId && data.usbProductId) {
-                        statusHtml += `<strong>🔌 USB IDs:</strong> Vendor=${data.usbVendorId}, Product=${data.usbProductId}<br><br>`;
+                        statusHtml += `<strong>🔌 USB IDs:</strong> Vendor=${data.usbVendorId}, Product=${data.usbProductId} ✅<br><br>`;
                         usbIdsSection.style.display = 'block';
                         vendorIdInput.value = data.usbVendorId;
                         productIdInput.value = data.usbProductId;
                         usbIdsStatus.textContent = 'USB IDs configured';
                         usbIdsStatus.style.color = '#4caf50';
+                        manualUsbIdsSection.style.display = 'none';
                     } else {
                         usbIdsSection.style.display = 'block';
-                        usbIdsStatus.textContent = 'USB IDs not configured. Set them below for direct USB printing.';
+                        manualUsbIdsSection.style.display = 'block';
+                        usbIdsStatus.textContent = 'USB IDs not configured. Use "Scan USB" to find devices or enter manually below.';
                         usbIdsStatus.style.color = '#ff9800';
                     }
                     
@@ -451,43 +469,41 @@
 
                 if (data.success) {
                     if (data.devices && data.devices.length > 0) {
-                        usbDevicesList.innerHTML = data.devices.map(device => {
-                            // Escape quotes in device names and IDs for safe HTML insertion
-                            const safeVendorId = String(device.vendor_id).replace(/'/g, "\\'");
-                            const safeProductId = String(device.product_id).replace(/'/g, "\\'");
-                            const safeDisplayName = String(device.display_name).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-                            
-                            return `
-                            <div style="margin: 8px 0; padding: 12px; background: white; border-radius: 6px; border: 1px solid #e0e0e0; cursor: pointer; transition: all 0.2s;" 
-                                 data-vendor-id="${safeVendorId}" 
-                                 data-product-id="${safeProductId}"
-                                 onclick="selectUsbDeviceFromElement(this)"
-                                 onmouseover="this.style.borderColor='#667eea'; this.style.boxShadow='0 2px 4px rgba(102,126,234,0.2)'"
-                                 onmouseout="this.style.borderColor='#e0e0e0'; this.style.boxShadow='none'">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <div style="flex: 1;">
-                                        <div style="font-weight: 600; font-size: 14px; color: #333; margin-bottom: 4px;">
-                                            ${safeDisplayName}
-                                        </div>
-                                        <div style="font-size: 12px; color: #666;">
-                                            <span style="position: relative;">
-                                                Vendor: ${device.vendor_id} | Product: ${device.product_id}
-                                                <span style="margin-left: 4px; color: #667eea; cursor: help; font-weight: bold;" 
-                                                      onmouseover="showTooltip(event, '${safeVendorId}', '${safeProductId}', ${device.vendor_id_decimal}, ${device.product_id_decimal})"
-                                                      onmouseout="hideTooltip()">?</span>
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <button onclick="event.stopPropagation(); selectUsbDevice('${safeVendorId}', '${safeProductId}')" 
-                                            style="padding: 6px 16px; font-size: 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
-                                        Select
+                        // Separate Epson devices from others
+                        const epsonDevices = data.devices.filter(d => d.display_name.toLowerCase().includes('epson'));
+                        const otherDevices = data.devices.filter(d => !d.display_name.toLowerCase().includes('epson'));
+                        
+                        let html = '';
+                        
+                        // Show Epson devices first
+                        if (epsonDevices.length > 0) {
+                            html += '<p style="font-weight: 600; margin-top: 10px; margin-bottom: 8px; color: #4caf50;">🖨️ Epson Printers:</p>';
+                            html += epsonDevices.map(device => createDeviceCard(device, true)).join('');
+                        }
+                        
+                        // Show other devices
+                        if (otherDevices.length > 0) {
+                            html += '<p style="font-weight: 600; margin-top: 15px; margin-bottom: 8px;">Other USB Devices:</p>';
+                            html += otherDevices.map(device => createDeviceCard(device, false)).join('');
+                        }
+                        
+                        // Add manual entry option
+                        html += `
+                            <div style="margin-top: 15px; padding: 12px; background: #fff3cd; border-radius: 6px; border: 1px solid #ffc107;">
+                                <p style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">Can't find your device? Enter IDs manually:</p>
+                                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                    <input type="text" id="scanManualVendorId" placeholder="Vendor ID (e.g., 0x04b8)" style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; width: 150px; font-size: 12px;">
+                                    <input type="text" id="scanManualProductId" placeholder="Product ID (e.g., 0x0e02)" style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; width: 150px; font-size: 12px;">
+                                    <button onclick="setManualUsbIdsFromScan()" style="padding: 6px 12px; font-size: 12px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                                        Set Manually
                                     </button>
                                 </div>
                             </div>
-                            `;
-                        }).join('');
+                        `;
+                        
+                        usbDevicesList.innerHTML = html;
                         usbDevicesSection.style.display = 'block';
-                        showStatus(`✅ Found ${data.devices.length} USB device(s). Click a device to configure it.`, 'success');
+                        showStatus(`✅ Found ${data.devices.length} USB device(s). ${epsonDevices.length > 0 ? 'Epson device(s) detected!' : 'Click a device to configure it.'}`, 'success');
                     } else {
                         showStatus('⚠️ No USB devices found. Make sure your printer is connected via USB.', 'info');
                     }
@@ -570,6 +586,34 @@
             const vendorId = element.getAttribute('data-vendor-id');
             const productId = element.getAttribute('data-product-id');
             selectUsbDevice(vendorId, productId);
+        };
+        
+        // Set manual USB IDs from scan interface
+        window.setManualUsbIdsFromScan = function() {
+            const vendorId = document.getElementById('scanManualVendorId').value.trim();
+            const productId = document.getElementById('scanManualProductId').value.trim();
+            
+            if (!vendorId || !productId) {
+                showStatus('Please enter both Vendor ID and Product ID', 'error');
+                return;
+            }
+            
+            selectUsbDevice(vendorId, productId);
+        };
+        
+        // Set manual USB IDs from main interface
+        window.setManualUsbIds = function() {
+            const vendorId = document.getElementById('manualVendorIdInput').value.trim();
+            const productId = document.getElementById('manualProductIdInput').value.trim();
+            
+            if (!vendorId || !productId) {
+                showStatus('Please enter both Vendor ID and Product ID', 'error');
+                return;
+            }
+            
+            vendorIdInput.value = vendorId;
+            productIdInput.value = productId;
+            setUsbIds();
         };
 
         // Set USB vendor/product IDs

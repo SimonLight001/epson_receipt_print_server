@@ -96,13 +96,15 @@ If this fails, the container doesn't have USB access.
 privileged: true
 ```
 
-### Solution 2: Mount USB Devices
+### Solution 2: Mount USB Devices (REQUIRED)
 ```yaml
 devices:
-  - /dev/bus/usb:/dev/bus/usb
+  - /dev/bus/usb:/dev/bus/usb  # This is REQUIRED for USB access!
 volumes:
   - /dev:/dev
 ```
+
+**Note:** The `--device=/dev/bus/usb:/dev/bus/usb` flag is critical. Without it, the container cannot access USB devices even with privileged mode.
 
 ### Solution 3: Add udev Rules (Linux Host)
 

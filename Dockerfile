@@ -30,6 +30,7 @@ RUN pip3 install --break-system-packages python-escpos pyusb
 COPY server.js ./
 COPY public/ ./public/
 COPY print_usb.py ./
+COPY swagger.json ./
 
 # Make Python script executable
 RUN chmod +x print_usb.py

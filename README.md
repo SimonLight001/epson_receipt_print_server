@@ -71,10 +71,12 @@ docker run -d \
   --name epson-printer-handler \
   --privileged \
   -p 3100:3100 \
-  --device=/dev/bus/usb \
+  --device=/dev/bus/usb:/dev/bus/usb \
   -v /dev:/dev \
-  epson-printer-handler
+  epson-printer-handler:latest
 ```
+
+**Important:** The `--device=/dev/bus/usb:/dev/bus/usb` flag is **required** for USB printer access!
 
 **Important Notes for Docker:**
 - The container needs `--privileged` mode or specific device access to communicate with USB printers
@@ -220,6 +222,41 @@ Content-Type: application/json
   "items": ["Item 1", "Item 2", "Item 3"]
 }
 ```
+
+#### Print Tasks (Structured Task List)
+```bash
+POST /api/print/tasks
+Content-Type: application/json
+
+{
+  "heading": "Task Heading",
+  "tasks": ["Task 1", "Task 2", "Task 3"]
+}
+```
+
+This endpoint prints a structured task list with:
+- **Heading**: Center-aligned at the top
+- **Date/Time**: Right-aligned (format: "23 Nov 15:13")
+- **Tasks**: Left-aligned with checkboxes `[ ]`
+
+Example output format:
+```
+    Task Heading
+
+        23 Nov 15:13
+
+  [ ] Task 1
+  [ ] Task 2
+  [ ] Task 3
+```
+
+#### API Documentation (Swagger/OpenAPI)
+```bash
+GET /api/docs
+GET /swagger.json
+```
+
+Returns OpenAPI 3.0 specification in JSON format. This endpoint is designed for AI agents to discover and understand the API.
 
 ### Example API Usage
 

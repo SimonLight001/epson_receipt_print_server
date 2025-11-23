@@ -6,16 +6,26 @@ This server now supports direct USB printing using vendor and product IDs, which
 
 The server uses Python's `python-escpos` library (which you've confirmed works) to communicate directly with USB printers using their vendor and product IDs.
 
+## Auto-Detection
+
+The server automatically detects Epson USB devices on startup. If an Epson printer is found, it will be configured automatically. You can verify this in the web interface's printer status section.
+
 ## Configuration
 
 ### Method 1: Via Web Interface (Recommended)
 
 1. Open the web interface at `http://your-server:3100`
-2. In the "Printer Status" section, you'll see a "USB Vendor/Product IDs" section
-3. Enter your USB IDs:
+2. The server will automatically detect Epson USB devices on startup
+3. If auto-detection didn't work:
+   - Click **"Scan USB"** to see all USB devices
+   - Epson devices will be highlighted in green
+   - Click on an Epson device to auto-configure it
+   - Or click any device to use it
+   - Or use the manual entry option at the bottom of the scan list
+4. In the "Printer Status" section, you can also manually enter USB IDs:
    - **Vendor ID**: `0x04b8` (or `1208` in decimal)
-   - **Product ID**: `0x0202` (or `514` in decimal)
-4. Click **"Set USB IDs"**
+   - **Product ID**: `0x0e02` (or `3586` in decimal)
+   - Click **"Set USB IDs"**
 5. The IDs will be saved and used for all future print jobs
 
 ### Method 2: Via API

@@ -41,6 +41,9 @@ Dockerfile
 docker-compose.yml
 docker-compose.*.yml
 
+# Keep swagger.json - it's needed for API docs
+# !swagger.json
+
 # Build artifacts
 dist
 build
